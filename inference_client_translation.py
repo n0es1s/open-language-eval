@@ -9,29 +9,40 @@ class AudioTranslationInterface:
     """
     Service class for audio translation using OpenAI and Groq APIs.
 
-    Translates audio from any supported language to English.
+    Translates audio from any supported language to any target language.
     Supports multiple models for translation with flexible client configuration.
     """
 
     def __init__(
         self,
+        model: str,
+        available_models: Optional[list[str]] = None,
         source_language: Optional[str] = None,
         target_language: Optional[str] = None,
-        available_models: Optional[list[str]] = None,
     ):
         """
         Initialize the audio translation service.
 
         Args:
+            model: Model ID to use
+            available_models: List of available models for the provider
             source_language: Source language code for translation (e.g., "es", "fr", "de")
             target_language: Target language code for translation (e.g., "en")
 
         Note:
             Translation always outputs English text (Whisper API limitation)
         """
+        self.model = model
+        self.available_models = available_models
         self.source_language = source_language
         self.target_language = target_language
-        self.available_models = available_models
+
+        # Validate model
+        if self.model not in self.available_models:
+            raise ValueError(
+                f"Model '{self.model}' not available for AudioTranslationInterface. "
+                f"Available models: {', '.join(self.available_models)}"
+            )
 
     def translate(
         self,

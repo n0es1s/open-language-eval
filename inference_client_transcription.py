@@ -35,7 +35,7 @@ class AudioTranscriptionInterface:
         # Validate model
         if self.model not in self.available_models:
             raise ValueError(
-                f"Model '{self.model}' not available for provider '{provider}'. "
+                f"Model '{self.model}' not available for AudioTranscriptionInterface. "
                 f"Available models: {', '.join(self.available_models)}"
             )
 
