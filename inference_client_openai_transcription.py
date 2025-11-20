@@ -5,32 +5,52 @@ from typing import Optional, Literal, Union
 from openai import OpenAI
 
 
-class AudioTranscriptionInterface:
+class AudioTranscriptionService:
     """
-    Interface class for audio transcription.
+    Service class for audio transcription using OpenAI and Groq APIs.
 
     Supports multiple models for transcription with flexible client configuration.
     """
 
+    # Available models for each provider
+    OPENAI_MODELS = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
+    GROQ_MODELS = ["whisper-large-v3", "whisper-large-v3-turbo"]
+
     def __init__(
         self,
-        model: str,
-        available_models: Optional[list[str]] = None,
+        provider: Literal["openai", "groq"] = "groq",
+        model: Optional[str] = None,
         source_language: Optional[str] = None,
+        api_key: Optional[str] = None
     ):
         """
         Initialize the audio transcription service.
 
         Args:
-            model: Model ID to use
-            available_models: List of available models for the provider
+            provider: API provider to use ("openai" or "groq")
+            model: Model ID to use. If None, uses default for provider
             source_language: Source language code for transcription (e.g., "en", "es")
+            api_key: API key for the provider. If None, reads from environment
         """
+        self.provider = provider
         self.source_language = source_language
 
         # Initialize the appropriate client
-        self.model = model
-        self.available_models = available_models
+        if provider == "openai":
+            self.client = OpenAI(
+                api_key=api_key or os.environ.get("OPENAI_API_KEY")
+            )
+            self.model = model or "whisper-1"
+            self.available_models = self.OPENAI_MODELS
+        elif provider == "groq":
+            self.client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=api_key or os.environ.get("GROQ_API_KEY")
+            )
+            self.model = model or "whisper-large-v3"
+            self.available_models = self.GROQ_MODELS
+        else:
+            raise ValueError(f"Invalid provider: {provider}. Must be 'openai' or 'groq'")
 
         # Validate model
         if self.model not in self.available_models:
@@ -42,6 +62,9 @@ class AudioTranscriptionInterface:
     def transcribe(
         self,
         audio_input: Union[str, bytes, io.BytesIO],
+        language: Optional[str] = None,
+        prompt: Optional[str] = None,
+        temperature: float = 0.0
     ) -> str:
         """
         Transcribe audio to text in the source language.
@@ -55,7 +78,25 @@ class AudioTranscriptionInterface:
         Returns:
             Transcribed text
         """
-        raise NotImplementedError
+        audio_file = self._prepare_audio_input(audio_input)
+
+        transcription_params = {
+            "model": self.model,
+            "file": audio_file,
+            "temperature": temperature
+        }
+
+        # Add language if specified
+        lang = language or self.source_language
+        if lang:
+            transcription_params["language"] = lang
+
+        # Add prompt if specified
+        if prompt:
+            transcription_params["prompt"] = prompt
+
+        transcription = self.client.audio.transcriptions.create(**transcription_params)
+        return transcription.text
 
     def _prepare_audio_input(self, audio_input: Union[str, bytes, io.BytesIO]) -> Union[io.BytesIO, object]:
         """
@@ -110,6 +151,23 @@ class AudioTranscriptionInterface:
 
         return base64.b64encode(audio_bytes).decode('utf-8')
 
+    def set_model(self, model: str):
+        """
+        Change the model being used.
+
+        Args:
+            model: New model ID
+
+        Raises:
+            ValueError: If model is not available for current provider
+        """
+        if model not in self.available_models:
+            raise ValueError(
+                f"Model '{model}' not available for provider '{self.provider}'. "
+                f"Available models: {', '.join(self.available_models)}"
+            )
+        self.model = model
+
     def get_available_models(self) -> list[str]:
         """
         Get list of available models for current provider.
@@ -118,3 +176,10 @@ class AudioTranscriptionInterface:
             List of model IDs
         """
         return self.available_models.copy()
+
+    def __repr__(self) -> str:
+        return (
+            f"AudioTranscriptionService(provider='{self.provider}', "
+            f"model='{self.model}', "
+            f"source_language='{self.source_language}')"
+        )
