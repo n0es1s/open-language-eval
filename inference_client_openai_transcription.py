@@ -6,6 +6,11 @@ from openai import OpenAI
 import websocket
 import json
 import time
+import threading
+from inference_client_transcription import AudioTranscriptionInterface
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
     """
@@ -25,10 +30,11 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
         noise_reduction: Optional[Literal["near_field", "far_field"]] = None,
         prompt: Optional[str] = None,
         turn_detection: Optional[Literal["server_vad", "semantic_vad"]] = "server_vad",
-        silence_duration_ms: Optional[int] = 200,
+        silence_duration_ms: Optional[int] = 500,
         eagerness: Optional[Literal["low", "medium", "high"]] = "medium",
-        interrupt_response: Optional[bool] = False,
+        interrupt_response: Optional[bool] = True,
         log_events: Optional[bool] = False,
+        completion_wait_sec: Optional[int] = 3,
     ):
         """
         Initialize the audio transcription service.
@@ -43,7 +49,7 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
         openai_api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not openai_api_key:
             raise ValueError("OpenAI API key not found")
-        url = "wss://api.openai.com/v1/realtime?model=gpt-realtime"
+        url = "wss://api.openai.com/v1/realtime?intent=transcription"
         headers = [
             "Authorization: Bearer " + openai_api_key,
         ]
@@ -78,15 +84,21 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
                     "noise_reduction": {"type": noise_reduction} if noise_reduction else None,
                     "transcription": {
                         "model": model,
-                        "prompt": prompt,
                         "language": source_language,
                     },
                     "turn_detection": turn_detection_config,
                 },
             }
         }
+        if prompt:
+            self.session_config["audio"]["input"]["transcription"]["prompt"] = prompt
 
-        self.transcript = None
+        self.transcriptions = []
+        self.completion_wait_sec = completion_wait_sec
+        self.last_transcript_received_time = None
+        self.started = False
+        self._error = None
+        self._error_event = threading.Event()
 
         def on_open(ws):
             # update session
@@ -106,22 +118,29 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
 
             if t == "session.updated":
                 print("Session updated", data.get("session", ""))
+                self.started = True
+
+            if t == "input_audio_buffer.committed":
+                print("Input audio buffer committed", data)
 
             # Streamed audio from the assistant (PCM16 base64 deltas)
             if t == "conversation.item.input_audio_transcription.completed":
-                transcript = data.get("transcript", "")
-                if self.transcript is None:
-                    print("Transcript completed:", transcript)
-                    self.transcript = transcript
-                else:
-                    print("Transcript updated:", transcript)
-                    self.transcript += "\n" + transcript
+                print("Transcript:", data)
+                transcript = data.get("transcript")
+                self.transcriptions.append((data.get("item_id"), transcript))
+                self.last_transcript_received_time = time.time()
 
             if t == "error":
                 print("Server error:", data)
+                self._error = Exception("Server error: " + data.get("message", ""))
+                self._error_event.set()
+                self.close()
 
         def on_error(ws, err):
             print("WebSocket error:", err)
+            self._error = Exception("WebSocket error: " + str(err))
+            self._error_event.set()
+            self.close()
 
         def on_close(ws, code, reason):
             print("WebSocket Closed:", code, reason)
@@ -139,6 +158,10 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
             daemon=True,
         )
         self._ws_thread.start()
+        while self.started is False:
+            if self._error_event.is_set():
+                raise self._error
+            time.sleep(0.1)
 
     def transcribe(
         self,
@@ -153,23 +176,38 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
         Returns:
             Transcribed text
         """
-        self.transcript = None
+        self.transcriptions = []
+        self.last_transcript_received_time = None
+        self._error = None
+        self._error_event.clear()
         self.ws.send(json.dumps({
             "type": "input_audio_buffer.append",
             "audio": base64.b64encode(audio_input.read()).decode("ascii")
         }))
+        # commit because last VAD event might not be triggered
+        self.ws.send(json.dumps({
+            "type": "input_audio_buffer.commit",
+        }))
 
         # wait for the transcript to be completed
-        while self.transcript is None:
-            time.sleep(0.1)
+        while not self.last_transcript_received_time or (time.time() - self.last_transcript_received_time) <= self.completion_wait_sec:
+            if self._error_event.is_set():
+                raise self._error
+            time.sleep(0.2)
+            if not self.last_transcript_received_time:
+                print("Waiting for transcript to start...")
+            else:
+                print("Waiting for transcript to complete. Time since last delta:", time.time() - self.last_transcript_received_time)
 
-        return self.transcript
+        return self.get_transcript()
 
     def get_session_config(self) -> dict:
         return self.session_config
 
     def get_transcript(self) -> str:
-        return self.transcript
+        # sort the transcriptions by content index
+        self.transcriptions.sort(key=lambda x: x[0])
+        return "".join([t[1] for t in self.transcriptions])
 
     def close(self):
         # Graceful shutdown
