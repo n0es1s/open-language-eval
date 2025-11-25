@@ -7,7 +7,8 @@ import soundfile as sf
 from datasets import load_dataset
 import sounddevice as sd
 from evaluate import load
-from whisper_normalizer.english import EnglishTextNormalizer, BaseTextNormalizer
+from whisper_normalizer.english import EnglishTextNormalizer
+from whisper_normalizer.basic import BasicTextNormalizer
 from inference_client_transcription import AudioTranscriptionInterface
 from inference_client_openai_transcription import AudioTranscriptionOpenAI
 from inference_client_groq_transcription import AudioTranscriptionGroq
@@ -60,7 +61,7 @@ wer_metric = load("wer")
 if args.language == "en":
     normalizer = EnglishTextNormalizer()
 else:
-    normalizer = BaseTextNormalizer()
+    normalizer = BasicTextNormalizer()
 
 # Load VoxPopuli dataset with specified language
 print(f"Loading VoxPopuli {args.language.upper()} dataset...")
@@ -71,7 +72,7 @@ print(f"Initializing {args.provider} transcription service...")
 if args.provider == "openai":
     transcription_service = AudioTranscriptionOpenAI(
         model=args.model,
-        source_language=args.language
+        source_language=args.language,
     )
 elif args.provider == "groq":
     transcription_service = AudioTranscriptionGroq(
@@ -96,6 +97,9 @@ results = {
     },
     "samples": []
 }
+if args.provider == "openai":
+    results["metadata"]["session_config"] = transcription_service.get_session_config()
+
 output_file = args.output
 print(f"Results will be saved to: {output_file}")
 print(f"Audio playback: {'enabled' if args.play_audio else 'disabled'}")

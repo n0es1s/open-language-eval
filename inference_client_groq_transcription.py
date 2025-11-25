@@ -3,6 +3,7 @@ import io
 import base64
 from typing import Optional, Literal, Union
 from openai import OpenAI
+from inference_client_transcription import AudioTranscriptionInterface
 
 
 class AudioTranscriptionGroq(AudioTranscriptionInterface):
