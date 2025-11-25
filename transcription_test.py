@@ -8,10 +8,12 @@ import soundfile as sf
 from datasets import load_dataset
 from evaluate import load
 from whisper_normalizer.english import EnglishTextNormalizer
-
 from open_language_eval.inference_clients.transcription_client import (
     AudioTranscriptionInterface,
 )
+from whisper_normalizer.english import EnglishTextNormalizer, BaseTextNormalizer
+from inference_client_openai_transcription import AudioTranscriptionOpenAI
+from inference_client_groq_transcription import AudioTranscriptionGroq
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(
@@ -23,7 +25,8 @@ parser.add_argument(
     "-l",
     type=str,
     default="en",
-    help="Language code for the dataset (e.g., 'en', 'es', 'de', 'fr')",
+    choices=["en", "es", "de", "fr", "pl", "it", "ro", "hu", "cs", "nl", "fi", "hr", "sk"],
+    help="Language code for the dataset"
 )
 parser.add_argument(
     "--num-samples", "-n", type=int, default=5, help="Number of audio samples to test"
@@ -55,7 +58,10 @@ parser.add_argument(
 args = parser.parse_args()
 
 wer_metric = load("wer")
-normalizer = EnglishTextNormalizer()
+if args.language == "en":
+    normalizer = EnglishTextNormalizer()
+else:
+    normalizer = BaseTextNormalizer()
 
 # Load VoxPopuli dataset with specified language
 print(f"Loading VoxPopuli {args.language.upper()} dataset...")
@@ -69,9 +75,18 @@ dataset = load_dataset(
 
 # Initialize transcription service
 print(f"Initializing {args.provider} transcription service...")
-transcription_service = AudioTranscriptionInterface(
-    provider=args.provider, model=args.model, source_language=args.language
-)
+if args.provider == "openai":
+    transcription_service = AudioTranscriptionOpenAI(
+        model=args.model,
+        source_language=args.language
+    )
+elif args.provider == "groq":
+    transcription_service = AudioTranscriptionGroq(
+        model=args.model,
+        source_language=args.language
+    )
+else:
+    raise ValueError(f"Unknown provider: {args.provider}")
 
 # Process multiple samples
 num_samples = args.num_samples
@@ -105,10 +120,10 @@ for i, sample in enumerate(dataset):
     print(f"Speaker: {sample['speaker_id']} ({sample['gender']})")
 
     # Get audio data
-    audio_array = sample["audio"]["array"]
-    sampling_rate = sample["audio"]["sampling_rate"]
-    audio_duration = len(audio_array) / sampling_rate
-    print(f"\nAudio duration: {audio_duration:.2f} seconds")
+    audio_array = sample['audio']['array']
+    sampling_rate = sample['audio']['sampling_rate']
+    audio_duration_seconds = round(len(audio_array) / sampling_rate, 2)
+    print(f"\nAudio duration: {audio_duration_seconds} seconds")
 
     # Play audio clip if enabled
     if args.play_audio:
@@ -141,11 +156,11 @@ for i, sample in enumerate(dataset):
     sample_result = {
         "sample_index": i + 1,
         "audio_info": {
-            "audio_id": sample["audio_id"],
-            "speaker_id": sample["speaker_id"],
-            "gender": sample["gender"],
-            "duration_seconds": round(len(audio_array) / sampling_rate, 2),
-            "sampling_rate": sampling_rate,
+            "audio_id": sample['audio_id'],
+            "speaker_id": sample['speaker_id'],
+            "gender": sample['gender'],
+            "duration_seconds": audio_duration_seconds,
+            "sampling_rate": sampling_rate
         },
         "transcriptions": {
             "reference_original": sample["normalized_text"],
