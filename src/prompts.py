@@ -78,3 +78,16 @@ Evaluate the severity of each error on a scale from 1 to 4, where 1 starts on "m
 with no impact on clarity", goes to "minor alterations" and "noticeably impact comprehension",
 up to 4, indicating "significant error substantially distort the message"."""
 
+TRANSLATION_PROMPT = """
+You are a professional translator. Translate the following text from {source_language} to {target_language}.
+
+Requirements:
+- Maintain the original meaning and tone
+- Preserve any formatting (line breaks, punctuation)
+- Keep proper nouns unchanged unless they have standard translations
+- Provide only the translation without explanations
+
+Text to translate:
+{text}
+
+Translation:"""
