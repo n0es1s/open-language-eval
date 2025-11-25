@@ -7,8 +7,10 @@ import soundfile as sf
 from datasets import load_dataset
 import sounddevice as sd
 from evaluate import load
-from whisper_normalizer.english import EnglishTextNormalizer
-from inference_client_transcription import AudioTranscriptionService
+from whisper_normalizer.english import EnglishTextNormalizer, BaseTextNormalizer
+from inference_client_transcription import AudioTranscriptionInterface
+from inference_client_openai_transcription import AudioTranscriptionOpenAI
+from inference_client_groq_transcription import AudioTranscriptionGroq
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(
@@ -19,7 +21,8 @@ parser.add_argument(
     "--language", "-l",
     type=str,
     default="en",
-    help="Language code for the dataset (e.g., 'en', 'es', 'de', 'fr')"
+    choices=["en", "es", "de", "fr", "pl", "it", "ro", "hu", "cs", "nl", "fi", "hr", "sk"],
+    help="Language code for the dataset"
 )
 parser.add_argument(
     "--num-samples", "-n",
@@ -54,7 +57,10 @@ parser.add_argument(
 args = parser.parse_args()
 
 wer_metric = load("wer")
-normalizer = EnglishTextNormalizer()
+if args.language == "en":
+    normalizer = EnglishTextNormalizer()
+else:
+    normalizer = BaseTextNormalizer()
 
 # Load VoxPopuli dataset with specified language
 print(f"Loading VoxPopuli {args.language.upper()} dataset...")
@@ -62,11 +68,18 @@ dataset = load_dataset("facebook/voxpopuli", args.language, split="test", stream
 
 # Initialize transcription service
 print(f"Initializing {args.provider} transcription service...")
-transcription_service = AudioTranscriptionService(
-    provider=args.provider,
-    model=args.model,
-    source_language=args.language
-)
+if args.provider == "openai":
+    transcription_service = AudioTranscriptionOpenAI(
+        model=args.model,
+        source_language=args.language
+    )
+elif args.provider == "groq":
+    transcription_service = AudioTranscriptionGroq(
+        model=args.model,
+        source_language=args.language
+    )
+else:
+    raise ValueError(f"Unknown provider: {args.provider}")
 
 # Process multiple samples
 num_samples = args.num_samples
@@ -91,45 +104,45 @@ print()
 for i, sample in enumerate(dataset):
     if i >= num_samples:
         break
-    
+
     print(f"\n{'='*60}")
     print(f"Sample {i+1}/{num_samples}")
     print(f"{'='*60}")
     print(f"Audio ID: {sample['audio_id']}")
     print(f"Expected transcription: {sample['normalized_text']}")
     print(f"Speaker: {sample['speaker_id']} ({sample['gender']})")
-    
+
     # Get audio data
     audio_array = sample['audio']['array']
     sampling_rate = sample['audio']['sampling_rate']
-    audio_duration = len(audio_array) / sampling_rate
-    print(f"\nAudio duration: {audio_duration:.2f} seconds")
-    
+    audio_duration_seconds = round(len(audio_array) / sampling_rate, 2)
+    print(f"\nAudio duration: {audio_duration_seconds} seconds")
+
     # Play audio clip if enabled
     if args.play_audio:
         print("Playing audio clip...")
         sd.play(audio_array, sampling_rate)
         sd.wait()  # Wait until audio finishes playing
-    
+
     # Convert audio array to file-like object for transcription
     audio_bytes = io.BytesIO()
     sf.write(audio_bytes, audio_array, sampling_rate, format='WAV')
     audio_bytes.seek(0)
     audio_bytes.name = "audio.wav"
-    
+
     # Transcribe using service
     print("\nTranscribing...")
     transcription_text = transcription_service.transcribe(audio_bytes)
-    
+
     print(f"\nModel transcription: {transcription_text}")
-    
+
     # Calculate Word Error Rate with normalization
     norm_reference = normalizer(sample['normalized_text'])
     norm_hypothesis = normalizer(transcription_text)
     wer_score = wer_metric.compute(references=[norm_reference], predictions=[norm_hypothesis])
     wer_scores.append(wer_score)
     print(f"Word Error Rate (WER): {wer_score:.2%}")
-    
+
     # Collect sample results
     sample_result = {
         "sample_index": i + 1,
@@ -137,7 +150,7 @@ for i, sample in enumerate(dataset):
             "audio_id": sample['audio_id'],
             "speaker_id": sample['speaker_id'],
             "gender": sample['gender'],
-            "duration_seconds": round(len(audio_array) / sampling_rate, 2),
+            "duration_seconds": audio_duration_seconds,
             "sampling_rate": sampling_rate
         },
         "transcriptions": {
@@ -151,7 +164,7 @@ for i, sample in enumerate(dataset):
         }
     }
     results["samples"].append(sample_result)
-    
+
     # Write updated results to JSON file after each sample
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
