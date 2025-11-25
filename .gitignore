@@ -1,4 +1,5 @@
 # Virtual environment
+.venv
 venv/
 __pycache__/
 *.pyc
@@ -25,4 +26,3 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
-
