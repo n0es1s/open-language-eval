@@ -2,10 +2,11 @@ import argparse
 import io
 import json
 from datetime import datetime
-
-import sounddevice as sd
+import itertools
 import soundfile as sf
 from datasets import load_dataset
+import sounddevice as sd
+from librosa import resample
 from evaluate import load
 from whisper_normalizer.english import EnglishTextNormalizer
 from open_language_eval.inference_clients.transcription_client import (
@@ -54,8 +55,17 @@ parser.add_argument(
     default="transcription_results.json",
     help="Output JSON file path",
 )
+parser.add_argument(
+    "--noise-reduction",
+    type=str,
+    choices=["near_field", "far_field"],
+    default=None,
+    help="which noise reduction method to use"
+)
 
 args = parser.parse_args()
+
+TARGET_SAMPLING_RATE = 24000 # target sampling rate given by openai, they only support 24 kHz for now
 
 wer_metric = load("wer")
 if args.language == "en":
@@ -79,11 +89,13 @@ if args.provider == "openai":
     transcription_service = AudioTranscriptionOpenAI(
         model=args.model,
         source_language=args.language,
+        noise_reduction=args.noise_reduction
     )
 elif args.provider == "groq":
     transcription_service = AudioTranscriptionGroq(
         model=args.model,
-        source_language=args.language
+        source_language=args.language,
+        noise_reduction=args.noise_reduction
     )
 else:
     raise ValueError(f"Unknown provider: {args.provider}")
@@ -125,13 +137,18 @@ for i, sample in enumerate(dataset):
     # Get audio data
     audio_array = sample['audio']['array']
     sampling_rate = sample['audio']['sampling_rate']
-    audio_duration_seconds = round(len(audio_array) / sampling_rate, 2)
+
+    if sampling_rate!=TARGET_SAMPLING_RATE:
+        print(f"resampling audio from {sampling_rate} to 24000")
+        audio_array = resample(audio_array, orig_sr=sampling_rate, target_sr=TARGET_SAMPLING_RATE)
+
+    audio_duration_seconds = round(len(audio_array) / TARGET_SAMPLING_RATE, 2)
     print(f"\nAudio duration: {audio_duration_seconds} seconds")
 
     # Play audio clip if enabled
     if args.play_audio:
         print("Playing audio clip...")
-        sd.play(audio_array, sampling_rate)
+        sd.play(audio_array, TARGET_SAMPLING_RATE)
         sd.wait()  # Wait until audio finishes playing
 
     # Convert audio array to file-like object for transcription
