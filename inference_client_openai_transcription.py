@@ -121,13 +121,32 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
                 self.started = True
 
             if t == "input_audio_buffer.committed":
+                # get item_id and previous_item_id from committed for reordering later
+                item_id = data["item_id"]
+                previous = data.get("previous_item_id")
+
+                if item_id not in self.transcriptions:
+                    self.transcriptions[item_id] = {"partial": "", "transcript": "", "previous": None}
+
+                self.transcriptions[item_id]["previous"] = previous
                 print("Input audio buffer committed", data)
 
             # Streamed audio from the assistant (PCM16 base64 deltas)
             if t == "conversation.item.input_audio_transcription.completed":
                 print("Transcript:", data)
-                transcript = data.get("transcript")
-                self.transcriptions.append((data.get("item_id"), transcript))
+                
+                item_id = data["item_id"]
+                transcript = data["transcript"]
+
+                # Ensure entry exists
+                if item_id not in self.transcriptions:
+                    self.transcriptions[item_id] = {"partial": "", "transcript": "", "previous": None}
+
+                self.transcriptions[item_id]["transcript"] = transcript
+                self.last_transcript_received_time = time.time()
+
+                print("Completed transcript:", transcript)
+                
                 self.last_transcript_received_time = time.time()
 
             if t == "error":
@@ -176,7 +195,7 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
         Returns:
             Transcribed text
         """
-        self.transcriptions = []
+        self.transcriptions = {} # a linked list dict
         self.last_transcript_received_time = None
         self._error = None
         self._error_event.clear()
@@ -205,9 +224,43 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
         return self.session_config
 
     def get_transcript(self) -> str:
-        # sort the transcriptions by content index
-        self.transcriptions.sort(key=lambda x: x[0])
-        return "".join([t[1] for t in self.transcriptions])
+        # reconstruct chunks via previous_item_id linked list
+        items = self.transcriptions   # dict: item_id -> {previous, partial, transcript}
+
+        if not items:
+            return ""
+
+        # --- 1. Find the head item (previous_item_id is None) ---
+        head = None
+        for item_id, info in items.items():
+            if info["previous"] is None:
+                head = item_id
+                break
+
+        if head is None:
+            # Fallback: no explicit head found → pick arbitrary stable item
+            head = next(iter(items.keys()))
+
+        # --- 2. Walk forward through the chain ---
+        ordered_transcripts = []
+        current = head
+
+        while current:
+            info = items[current]
+            text = info["transcript"] or info["partial"] or ""
+            ordered_transcripts.append(text)
+
+            # find next item whose previous == current
+            next_item = None
+            for iid, d in items.items():
+                if d["previous"] == current:
+                    next_item = iid
+                    break
+
+            current = next_item
+
+        # --- 3. Join together into final transcript ---
+        return " ".join(ordered_transcripts)
 
     def close(self):
         # Graceful shutdown
