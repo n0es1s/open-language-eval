@@ -30,33 +30,32 @@ for language in languages:
 
     for transcription_model, transcription_provider in transcription_models:
         for translation_model, translation_provider in translation_models:
-            if transcription_model != "whisper-large-v3":
+            transcription_voxpopuli = TranscriptionVoxPopuli(
+                language="hu",
+                output_path=f"outputs/{language}/transcription/{transcription_model.replace('/', '_')}.json",
+                provider=transcription_provider,
+                model=transcription_model,
+                translate=False,
+            )
+
+            # transcription_voxpopuli.transcribe_dataset(max_samples=100)
+            transcription_voxpopuli.transcribe_dataset(
+                files_path=f"data/{language}/test_part_0",
+            )
+
+            if transcription_model in translation_available_transcription_models:
                 transcription_voxpopuli = TranscriptionVoxPopuli(
                     language="hu",
-                    output_path=f"outputs/{language}/transcription/{transcription_model.replace('/', '_')}.json",
+                    output_path=f"outputs/{language}/transcription/{transcription_model.replace('/', '_')}_translated.json",
                     provider=transcription_provider,
                     model=transcription_model,
-                    translate=False,
+                    translate=True,
                 )
 
                 # transcription_voxpopuli.transcribe_dataset(max_samples=100)
                 transcription_voxpopuli.transcribe_dataset(
                     files_path=f"data/{language}/test_part_0",
                 )
-
-                if transcription_model in translation_available_transcription_models:
-                    transcription_voxpopuli = TranscriptionVoxPopuli(
-                        language="hu",
-                        output_path=f"outputs/{language}/transcription/{transcription_model.replace('/', '_')}_translated.json",
-                        provider=transcription_provider,
-                        model=transcription_model,
-                        translate=True,
-                    )
-
-                    # transcription_voxpopuli.transcribe_dataset(max_samples=100)
-                    transcription_voxpopuli.transcribe_dataset(
-                        files_path=f"data/{language}/test_part_0",
-                    )
 
             translation_voxpopuli = TranslationVoxPopuli(
                 model=translation_model,

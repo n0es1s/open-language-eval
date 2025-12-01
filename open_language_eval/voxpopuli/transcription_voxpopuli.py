@@ -295,21 +295,3 @@ class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
         print(f"Average WER: {avg_wer:.4f}")
         print(f"Min WER: {min(wer_scores):.4f}")
         print(f"Max WER: {max(wer_scores):.4f}")
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    transcription_voxpopuli = TranscriptionVoxPopuli(
-        language="hu",
-        output_path="outputs/hu/hu_transcription_whisper_large_v3_translate.json",
-        provider="groq",
-        model="whisper-large-v3",
-        translate=True,
-    )
-    # transcription_voxpopuli.transcribe_dataset(max_samples=100)
-    transcription_voxpopuli.transcribe_dataset(
-        files_path="data/hu/test_part_0",
-    )
