@@ -2,7 +2,6 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Literal, Optional
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
 from open_language_eval.assets.prompts import TRANSLATION_PROMPT
@@ -104,46 +103,3 @@ class TranslationInterface:
                 results[id_] = future.result()
 
             return results
-
-    # def batch_translate_json(
-    #     self, file_path: str, text_column: str, prefix: str, max_workers: int = 10
-    # ) -> pd.DataFrame:
-    #     file_path = Path(file_path)
-    #     df = pd.read_csv(file_path)
-    #     texts = df[text_column].tolist()
-    #     translated_texts = self.batch_translate(texts, max_workers)
-    #     df[
-    #         prefix + self.source_language + "_" + self.target_language + "_translation"
-    #     ] = translated_texts
-    #     df.to_csv(file_path, index=False)
-    #     return df
-
-
-if __name__ == "__main__":
-    load_dotenv(".env")
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-    client = OpenAI(base_url="https://api.groq.com/openai/v1/", api_key=GROQ_API_KEY)
-
-    language = "hu"
-
-    # model = "openai/gpt-oss-120b"
-    model = "qwen/qwen3-32b"
-
-    source_language = "Hungarian"
-    target_language = "English"
-    temperature = 0.0
-    translation = TranslationInterface(
-        client=client,
-        model=model,
-        source_language=source_language,
-        target_language=target_language,
-        temperature=temperature,
-    )
-    results_df = translation.batch_translate_csv(
-        file_path=f"../data/{language}_transcription_results.csv",
-        text_column="w_l_v3_tbpredicted_transcription",
-        # prefix="gpt_oss_120b_",
-        prefix="qwen3_32b_",
-        max_workers=10,
-    )

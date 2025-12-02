@@ -1,7 +1,6 @@
 import json
 from typing import Literal, Optional
 
-from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
 from open_language_eval.inference_clients.translation_client import TranslationInterface
@@ -123,17 +122,3 @@ class TranslationVoxPopuli(TranslationInterface):
             print(
                 f"Translated {batch_idx + self.batch_size} samples and saved to {output_file_path}"
             )
-
-
-if __name__ == "__main__":
-    load_dotenv()
-    translation_voxpopuli = TranslationVoxPopuli(
-        model="qwen/qwen3-32b",
-        provider="groq",
-        source_language="Hungarian",
-        target_language="English",
-    )
-    translation_voxpopuli.translate_data(
-        input_file_path="outputs/hu/hu_transcription_whisper_large_v3_turbo.json",
-        output_file_path="outputs/hu/hu_whisper_large_v3_turbo_qwen3-32b_translated.json",
-    )
