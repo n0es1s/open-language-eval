@@ -1,9 +1,7 @@
-import base64
-import io
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Literal, Optional, Union
-
+import io
+import base64
+from typing import Optional, Literal, Union, Any
 from openai import OpenAI
 
 
@@ -14,63 +12,32 @@ class AudioTranscriptionInterface:
     Supports multiple models for transcription with flexible client configuration.
     """
 
-    GROQ_MODELS = ["whisper-large-v3", "whisper-large-v3-turbo"]
-    GROQ_TRANSLATION_MODELS = ["whisper-large-v3"]
-    OPENAI_MODELS = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
-    OPENAI_TRANSLATION_MODELS = []
-
     def __init__(
         self,
-        provider: Literal["groq", "openai"] = "groq",
-        model: Optional[str] = None,
+        model: str,
+        available_models: Optional[list[str]] = None,
         source_language: Optional[str] = None,
-        api_key: Optional[str] = None,
-        prompt: Optional[str] = None,
-        temperature: float = 0.0,
-        translate: bool = False,
     ):
         """
-        Initialize the AudioTranscriptionInterface.
+        Initialize the audio transcription service.
 
         Args:
-            provider: The provider to use for transcription (either "groq" or "openai").
-            model: The model to use for transcription.
-            source_language: The language of the source text.
-            api_key: The API key to use for transcription.
-            prompt: The prompt to use for transcription.
-            temperature: The temperature to use for transcription.
-            translate: Whether to translate the transcription.
+            model: Model ID to use
+            available_models: List of available models for the provider
+            source_language: Source language code for transcription (e.g., "en", "es")
         """
-
-        self.provider = provider
-        self.prompt = prompt
-        self.temperature = temperature
         self.source_language = source_language
-        self.api_key = api_key
-        self.translate = translate
 
-        # Initialize the appropriate client and model
-        if provider == "groq":
-            self.client = OpenAI(
-                base_url="https://api.groq.com/openai/v1",
-                api_key=api_key or os.environ.get("GROQ_API_KEY"),
-            )
-            self.available_models = (
-                self.GROQ_TRANSLATION_MODELS if translate else self.GROQ_MODELS
-            )
-        else:
-            self.client = OpenAI(
-                api_key=api_key or os.environ.get("OPENAI_API_KEY"),
-            )
-            self.available_models = (
-                self.OPENAI_TRANSLATION_MODELS if translate else self.OPENAI_MODELS
-            )
+        # Initialize the appropriate client
+        self.model = model
+        self.available_models = available_models
 
-        if model is None:
-            self.model = self.available_models[0]
-
+        # Validate model
         if self.model not in self.available_models:
-            raise ValueError(f"Model '{self.model}' not available for {self.provider}")
+            raise ValueError(
+                f"Model '{self.model}' not available for AudioTranscriptionInterface. "
+                f"Available models: {', '.join(self.available_models)}"
+            )
 
     def transcribe(
         self,
@@ -81,37 +48,14 @@ class AudioTranscriptionInterface:
 
         Args:
             audio_input: Audio file path, bytes, or BytesIO object
+            language: Override source language for this transcription
+            prompt: Optional prompt to guide the transcription
+            temperature: Sampling temperature (0.0 to 1.0)
 
         Returns:
             Transcribed text
         """
-        audio_file = self._prepare_audio_input(audio_input)
-
-        transcription_params = {
-            "model": self.model,
-            "file": audio_file,
-            "temperature": self.temperature,
-        }
-
-        # Add language if specified
-        if not self.translate:
-            if self.source_language:
-                transcription_params["language"] = self.source_language
-
-        # Add prompt if specified
-        if self.prompt:
-            transcription_params["prompt"] = self.prompt
-
-        if self.translate:
-            transcription = self.client.audio.translations.create(
-                **transcription_params
-            )
-        else:
-            transcription = self.client.audio.transcriptions.create(
-                **transcription_params
-            )
-
-        return transcription.text
+        raise NotImplementedError
 
     def transcribe_batch(
         self,
@@ -128,34 +72,7 @@ class AudioTranscriptionInterface:
         Returns:
             List of tuples (identifier, transcription_text)
         """
-        results = {}
-
-        def transcribe_single(
-            item: tuple[Any, Union[str, bytes, io.BytesIO]],
-        ) -> tuple[Any, str]:
-            """Helper function to transcribe a single audio input."""
-            identifier, audio_input = item
-            try:
-                transcription = self.transcribe(audio_input)
-                return (identifier, transcription)
-            except Exception as e:
-                # Return error message as transcription
-                print(f"Error transcribing {identifier}: {e}")
-                return (identifier, f"ERROR: {str(e)}")
-
-        # Use ThreadPoolExecutor for concurrent processing
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            future_to_item = {
-                executor.submit(transcribe_single, item): item for item in audio_inputs
-            }
-
-            # Collect results as they complete
-            for future in as_completed(future_to_item):
-                id, result = future.result()
-                results[id] = result
-
-        return results
+        raise NotImplementedError
 
     def _prepare_audio_input(
         self, audio_input: Union[str, bytes, io.BytesIO]
@@ -222,13 +139,3 @@ class AudioTranscriptionInterface:
             List of model IDs
         """
         return self.available_models.copy()
-
-    def __repr__(self) -> str:
-        return (
-            f"AudioTranslation(model='{self.model}', "
-            f"provider='{self.provider}', "
-            f"source_language='{self.source_language}', "
-            f"prompt='{self.prompt}', "
-            f"temperature='{self.temperature}')"
-            f"translate='{self.translate}')"
-        )

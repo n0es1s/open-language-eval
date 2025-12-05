@@ -7,7 +7,7 @@ import websocket
 import json
 import time
 import threading
-from inference_client_transcription import AudioTranscriptionInterface
+from open_language_eval.inference_clients.transcription_client import AudioTranscriptionInterface
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -134,7 +134,7 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
             # Streamed audio from the assistant (PCM16 base64 deltas)
             if t == "conversation.item.input_audio_transcription.completed":
                 print("Transcript:", data)
-                
+
                 item_id = data["item_id"]
                 transcript = data["transcript"]
 
@@ -146,7 +146,7 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
                 self.last_transcript_received_time = time.time()
 
                 print("Completed transcript:", transcript)
-                
+
                 self.last_transcript_received_time = time.time()
 
             if t == "error":

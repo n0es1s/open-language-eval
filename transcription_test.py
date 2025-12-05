@@ -12,9 +12,9 @@ from whisper_normalizer.english import EnglishTextNormalizer
 from open_language_eval.inference_clients.transcription_client import (
     AudioTranscriptionInterface,
 )
+from open_language_eval.inference_clients.transcription_client_openai import AudioTranscriptionOpenAI
+from open_language_eval.inference_clients.transcription_client_groq import AudioTranscriptionGroq
 from whisper_normalizer.basic import BasicTextNormalizer
-from inference_client_openai_transcription import AudioTranscriptionOpenAI
-from inference_client_groq_transcription import AudioTranscriptionGroq
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(

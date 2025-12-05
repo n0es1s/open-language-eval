@@ -18,7 +18,7 @@ from open_language_eval.evals.transcription_evaluation import TranscriptionWER
 from open_language_eval.inference_clients.transcription_client import (
     AudioTranscriptionInterface,
 )
-
+from open_language_eval.inference_clients.transcription_client_groq import AudioTranscriptionGroq
 
 class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
     def __init__(
@@ -50,7 +50,8 @@ class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
             self.normalizer = EnglishTextNormalizer()
         else:
             self.normalizer = None
-        AudioTranscriptionInterface.__init__(
+        # TODO: add openai support
+        AudioTranscriptionGroq.__init__(
             self,
             provider=provider,
             model=model,
