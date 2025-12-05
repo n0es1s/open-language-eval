@@ -1,0 +1,18 @@
+language_code_map = {
+    "hu": "Hungarian",
+    "en": "English",
+    "de": "German",
+    "cs": "Czech",
+    "pl": "Polish",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "bn": "Bengali",
+    "te": "Telugu",
+    "ta": "Tamil",
+    "mr": "Marathi",
+}

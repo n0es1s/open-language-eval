@@ -4,6 +4,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Literal, Optional, Union
 
+from mistral_common.audio import Audio
+from mistral_common.protocol.instruct.messages import RawAudio
+from mistral_common.protocol.transcription.request import TranscriptionRequest
 from openai import OpenAI
 
 
@@ -18,10 +21,12 @@ class AudioTranscriptionInterface:
     GROQ_TRANSLATION_MODELS = ["whisper-large-v3"]
     OPENAI_MODELS = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
     OPENAI_TRANSLATION_MODELS = []
+    MISTRAL_MODELS = ["voxtrall-small-24b", "voxtrall-mini-3b"]
+    MISTRAL_TRANSLATION_MODELS = []
 
     def __init__(
         self,
-        provider: Literal["groq", "openai"] = "groq",
+        provider: Literal["groq", "openai", "mistral"] = "groq",
         model: Optional[str] = None,
         source_language: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -58,14 +63,21 @@ class AudioTranscriptionInterface:
             self.available_models = (
                 self.GROQ_TRANSLATION_MODELS if translate else self.GROQ_MODELS
             )
-        else:
+        elif provider == "openai":
             self.client = OpenAI(
                 api_key=api_key or os.environ.get("OPENAI_API_KEY"),
             )
             self.available_models = (
                 self.OPENAI_TRANSLATION_MODELS if translate else self.OPENAI_MODELS
             )
-
+        elif provider == "mistral":
+            self.client = OpenAI(
+                base_url="http://<your-server-host>:8000/v1",
+                api_key="EMPTY",
+            )
+            self.available_models = (
+                self.MISTRAL_TRANSLATION_MODELS if translate else self.MISTRAL_MODELS
+            )
         if model is None:
             self.model = self.available_models[0]
 
@@ -107,9 +119,16 @@ class AudioTranscriptionInterface:
                 **transcription_params
             )
         else:
-            transcription = self.client.audio.transcriptions.create(
-                **transcription_params
-            )
+            if self.provider == "mistral":
+                transcription_params["audio"] = transcription_params.pop("file")
+                req = TranscriptionRequest(**transcription_params).to_openai(
+                    exclude=("top_p", "seed")
+                )
+                transcription = self.client.audio.transcriptions.create(**req)
+            else:
+                transcription = self.client.audio.transcriptions.create(
+                    **transcription_params
+                )
 
         return transcription.text
 
@@ -169,6 +188,13 @@ class AudioTranscriptionInterface:
         Returns:
             Prepared audio file object
         """
+        if self.provider == "mistral":
+            if not isinstance(audio_input, str):
+                raise ValueError("audio_input must be a file path for Mistral")
+            audio = Audio.from_file(audio_input, strict=False)
+
+            return RawAudio.from_audio(audio)
+
         # If it's a file path
         if isinstance(audio_input, str):
             return open(audio_input, "rb")

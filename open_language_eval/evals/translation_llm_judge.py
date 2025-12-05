@@ -216,30 +216,39 @@ class TranslationJudge:
         def process_pair(
             pair_id: Any, source_text: str, translated_text: str
         ) -> Tuple[Any, Dict[str, Any]]:
-            try:
-                assessment = self.assess_translation(source_text, translated_text)
+            retries = 0
+            while retries < 3:
+                try:
+                    assessment = self.assess_translation(source_text, translated_text)
 
-                # Build result dictionary with serialized errors
-                result = {
-                    "pair_id": pair_id,
-                    "source_text": source_text,
-                    "translated_text": translated_text,
-                    "num_errors": len(assessment.errors),
-                    "errors": [error.model_dump() for error in assessment.errors],
-                }
+                    # Build result dictionary with serialized errors
+                    result = {
+                        "pair_id": pair_id,
+                        "source_text": source_text,
+                        "translated_text": translated_text,
+                        "num_errors": len(assessment.errors),
+                        "errors": [error.model_dump() for error in assessment.errors],
+                    }
 
-                return pair_id, result
+                    break
 
-            except Exception as e:
-                print(f"\nError processing pair {pair_id}: {str(e)}")
-                return pair_id, {
-                    "pair_id": pair_id,
-                    "source_text": source_text,
-                    "translated_text": translated_text,
-                    "num_errors": -1,
-                    "errors": [],
-                    "error": str(e),
-                }
+                except Exception as e:
+                    print(f"\nError processing pair {pair_id}: {str(e)}")
+
+                    result = {
+                        "pair_id": pair_id,
+                        "source_text": source_text,
+                        "translated_text": translated_text,
+                        "num_errors": -1,
+                        "errors": [],
+                        "error": str(e),
+                    }
+                    retries += 1
+
+            if result["num_errors"] == -1:
+                print(f"\nError processing pair {pair_id}: {result['error']}")
+
+            return pair_id, result
 
         def save_results(results: Dict[Any, Dict[str, Any]], batch_num: int):
             """Save results to JSON file."""

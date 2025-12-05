@@ -125,7 +125,7 @@ This script can be used to run the speech to text models chained with translatio
 The top of the script contains the following parameters that can be set by the user:
 1. Languages. The languages within the VoxPopuli dataset to use. 
 E.g. `["de", "en"]`
-2. Transcription models. The models to use for transcription as well as the provider. E.g. `[("whisper_large_v3", "groq")]`.
+2. Transcription models. The models to use for transcription as well as the provider. E.g. `[("whisper-large-v3", "groq")]`.
 3. Models with built-in translation capabilities. Some models, such as Whisper V3 Large, have built in capabilities to translate text to English after transcribing the audio. If this functionality is to be used, the model name should be added to the list.
 4. Translation models.The models to use for text translations as well as the provider. E.g. `[("qwen/qwen3-32b", "groq"), ("gpt-4o-mini", "openai")]`.
 5. Input directory. The folder where the VoxPopuli data is stored. The folder should contain subfolders for each language e.g. "de", "en" etc. Within each folder, there should be a folder called "test_part_0" containing the audio and a file called asr_test.tsv containing the associated metadata. Note that these are the default names the data would be downloaded as. The directory can also be set as `None` in which case the HuggingFace dataloader will be utilised to load the data - This is not recommended as it is much slower.
@@ -199,7 +199,7 @@ transcription_voxpopuli = TranscriptionVoxPopuli(
             language="de",
             output_path="file_path.json",
             provider="groq",
-            model="whisper_large_v3",
+            model="whisper-large-v3",
             translate=False, # can be set to True for models supporting built in translations
         )
 
@@ -294,7 +294,7 @@ transforms = jiwer.Compose(
                 jiwer.Strip(),
                 jiwer.RemovePunctuation(),
                 jiwer.ReduceToListOfListOfWords(),
-            ]
+            ])
 
 evaluator = TranscriptionWER(transforms=transforms)
 
