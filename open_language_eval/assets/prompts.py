@@ -6,8 +6,7 @@ Based on the source segment and machine translation surrounded with triple backt
 error types in the translation and classify them. The categories of errors are: accuracy
 (addition, mistranslation, omission, untranslated text), fluency (character encoding, grammar,
 inconsistency, punctuation, register, spelling),
-style (awkward), terminology (inappropriate for context, inconsistent use), non-translation,
-other, or no-error.\n
+style (awkward expression, inappropriate for context, inconsistent use), other, or no-error.\n
 
 When returning the error categories, use the following categories: accuracy, fluency, style, terminology, non-translation, other, or no-error.
 
