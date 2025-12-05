@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,7 +12,7 @@ load_dotenv()
 # ============ PARAMETERS ==========
 
 # 1. Languages in the VoxPopuli dataset to use
-languages = ["cs", "pl", "hu"]
+languages = ["pl", "hu"]
 
 # 2. Models to use for the transcription, as well as the provider (groq or openai)
 transcription_models = [
@@ -35,6 +36,11 @@ output_directory = "outputs"
 
 
 for language in languages:
+    if not os.path.exists(Path(output_directory) / f"{language}/transcription"):
+        os.makedirs(Path(output_directory) / f"{language}/transcription")
+    if not os.path.exists(Path(output_directory) / f"{language}/translation"):
+        os.makedirs(Path(output_directory) / f"{language}/translation")
+
     for transcription_model, transcription_provider in transcription_models:
         transcription_voxpopuli = TranscriptionVoxPopuli(
             language=language,
