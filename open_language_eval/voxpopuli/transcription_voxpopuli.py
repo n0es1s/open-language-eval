@@ -13,11 +13,13 @@ import soundfile as sf
 from datasets import load_dataset
 from tqdm.auto import tqdm
 from whisper_normalizer.english import EnglishTextNormalizer
+from whisper_normalizer.base import BaseTextNormalizer
 
 from open_language_eval.evals.transcription_evaluation import TranscriptionWER
 from open_language_eval.inference_clients.transcription_client import (
     AudioTranscriptionInterface,
 )
+from open_language_eval.inference_clients.transcription_client_openai import AudioTranscriptionOpenAI
 from open_language_eval.inference_clients.transcription_client_groq import AudioTranscriptionGroq
 
 class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
@@ -49,18 +51,28 @@ class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
         if language == "en":
             self.normalizer = EnglishTextNormalizer()
         else:
-            self.normalizer = None
-        # TODO: add openai support
-        AudioTranscriptionGroq.__init__(
-            self,
-            provider=provider,
-            model=model,
-            source_language=language,
-            api_key=None,
-            prompt=None,
-            temperature=0.0,
-            translate=translate,
-        )
+            self.normalizer = BaseTextNormalizer()
+
+        if provider == "groq":
+            AudioTranscriptionGroq.__init__(
+                self,
+                model=model,
+                source_language=language,
+                api_key=None,
+                prompt=None,
+                temperature=0.0,
+                translate=translate,
+            )
+        elif provider == "openai":
+            if self.translate:
+                raise ValueError("Translation is not supported for OpenAI provider")
+            AudioTranscriptionOpenAI.__init__(
+                self,
+                model=model,
+                source_language=language,
+            )
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
         TranscriptionWER.__init__(self, self.transforms, self.normalizer)
 
     def transcribe_dataset(
@@ -103,7 +115,7 @@ class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
                 streaming=True,
                 trust_remote_code=True,
             )
-            total_samples = max_samples
+            total_samples = len(dataset) if not max_samples else min(max_samples, len(dataset))
 
         results = {
             "metadata": {
@@ -140,7 +152,7 @@ class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
                 audio_array, sampling_rate = librosa.load(audio_file_path, sr=None)
 
             # Convert numpy array to audio bytes
-            audio_bytes = self._audio_array_to_bytes(audio_array, sampling_rate)
+            audio_bytes = self._prepare_audio_input(audio_array, sampling_rate)
 
             # Store sample info and audio
             batch_samples.append(
@@ -191,16 +203,6 @@ class TranscriptionVoxPopuli(AudioTranscriptionInterface, TranscriptionWER):
 
         else:
             raise TypeError(f"Unsupported data type: {type(data)}")
-
-    def _audio_array_to_bytes(
-        self, audio_array: np.ndarray, sampling_rate: int
-    ) -> io.BytesIO:
-        """Convert audio array to BytesIO object in WAV format."""
-        audio_buffer = io.BytesIO()
-        sf.write(audio_buffer, audio_array, sampling_rate, format="WAV")
-        audio_buffer.seek(0)
-        audio_buffer.name = "audio.wav"
-        return audio_buffer
 
     def _process_batch(
         self,

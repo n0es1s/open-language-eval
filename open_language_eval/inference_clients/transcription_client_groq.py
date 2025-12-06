@@ -14,6 +14,7 @@ class AudioTranscriptionGroq(AudioTranscriptionInterface):
     """
 
     GROQ_MODELS = ["whisper-large-v3", "whisper-large-v3-turbo"]
+    GROQ_TRANSLATION_MODELS = ["whisper-large-v3"]
 
     def __init__(
         self,
@@ -22,6 +23,7 @@ class AudioTranscriptionGroq(AudioTranscriptionInterface):
         api_key: Optional[str] = None,
         prompt: Optional[str] = None,
         temperature: float = 0.0,
+        translate: bool = False,
     ):
         """
         Initialize the audio transcription service.
@@ -30,10 +32,12 @@ class AudioTranscriptionGroq(AudioTranscriptionInterface):
             model: Model ID to use. If None, uses default for provider
             source_language: Source language code for transcription (e.g., "en", "es")
             api_key: API key for the provider. If None, reads from environment
+            translate: Whether to translate the audio to English
         """
-        super().__init__(model or "whisper-large-v3", self.GROQ_MODELS, source_language)
+        super().__init__(model or "whisper-large-v3", self.GROQ_TRANSLATION_MODELS if translate else self.GROQ_MODELS, source_language)
         self.prompt = prompt
         self.temperature = temperature
+        self.translate = translate
 
         # Initialize the appropriate client
         self.client = OpenAI(
@@ -89,4 +93,5 @@ class AudioTranscriptionGroq(AudioTranscriptionInterface):
             f"source_language='{self.source_language}', "
             f"prompt='{self.prompt}', "
             f"temperature='{self.temperature}')"
+            f"translate='{self.translate}')"
         )
