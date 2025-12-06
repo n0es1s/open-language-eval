@@ -9,6 +9,7 @@ import time
 import threading
 from open_language_eval.inference_clients.transcription_client import AudioTranscriptionInterface
 from dotenv import load_dotenv
+import numpy as np
 
 load_dotenv()
 
@@ -21,6 +22,9 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
 
     # Available models for each provider
     OPENAI_MODELS = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
+    TARGET_SAMPLE_RATE = 24000
+    FORMAT = "WAV"
+    SUBTYPE = "PCM_16"
 
     def __init__(
         self,
@@ -44,7 +48,7 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
             source_language: Source language code for transcription (e.g., "en", "es")
             api_key: API key for the provider. If None, reads from environment
         """
-        super().__init__(model, self.OPENAI_MODELS, source_language)
+        super().__init__(model, self.OPENAI_MODELS, source_language, self.TARGET_SAMPLE_RATE, self.FORMAT, self.SUBTYPE)
 
         openai_api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not openai_api_key:
@@ -184,21 +188,30 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
 
     def transcribe(
         self,
-        audio_input: io.BytesIO,
+        audio_input: Union[str, bytes, io.BytesIO, np.ndarray],
+        sample_rate: Optional[int] = None,
     ) -> str:
         """
         Transcribe audio to text in the source language.
 
         Args:
             audio_input: Audio file path, bytes, or BytesIO object
+            sample_rate: Sample rate for audio input
 
         Returns:
             Transcribed text
         """
+        audio_input = self._prepare_audio_input(audio_input, sample_rate)
+
         self.transcriptions = {} # a linked list dict
         self.last_transcript_received_time = None
         self._error = None
         self._error_event.clear()
+        # clear audio buffer
+        self.ws.send(json.dumps({
+            "type": "input_audio_buffer.clear"
+        }))
+        # append audio
         self.ws.send(json.dumps({
             "type": "input_audio_buffer.append",
             "audio": base64.b64encode(audio_input.read()).decode("ascii")
@@ -213,10 +226,10 @@ class AudioTranscriptionOpenAI(AudioTranscriptionInterface):
             if self._error_event.is_set():
                 raise self._error
             time.sleep(0.2)
-            if not self.last_transcript_received_time:
-                print("Waiting for transcript to start...")
-            else:
-                print("Waiting for transcript to complete. Time since last delta:", time.time() - self.last_transcript_received_time)
+            #if not self.last_transcript_received_time:
+            #    print("Waiting for transcript to start...")
+            #else:
+            #    print("Waiting for transcript to complete. Time since last delta:", time.time() - self.last_transcript_received_time)
 
         return self.get_transcript()
 

@@ -1,10 +1,9 @@
-import base64
 import io
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Literal, Optional, Union
+from typing import Any, Optional, Union
 from open_language_eval.inference_clients.transcription_client import AudioTranscriptionInterface
 from openai import OpenAI
+import numpy as np
 
 
 class AudioTranscriptionGroq(AudioTranscriptionInterface):
@@ -44,7 +43,8 @@ class AudioTranscriptionGroq(AudioTranscriptionInterface):
 
     def transcribe(
         self,
-        audio_input: Union[str, bytes, io.BytesIO],
+        audio_input: Union[str, bytes, io.BytesIO, np.ndarray],
+        sample_rate: Optional[int] = None,
     ) -> str:
         """
         Transcribe audio to text in the source language.
@@ -55,7 +55,7 @@ class AudioTranscriptionGroq(AudioTranscriptionInterface):
         Returns:
             Transcribed text
         """
-        audio_file = self._prepare_audio_input(audio_input)
+        audio_file = self._prepare_audio_input(audio_input, sample_rate)
 
         transcription_params = {
             "model": self.model,
@@ -82,50 +82,6 @@ class AudioTranscriptionGroq(AudioTranscriptionInterface):
             )
 
         return transcription.text
-
-    def transcribe_batch(
-        self,
-        audio_inputs: list[tuple[Any, Union[str, bytes, io.BytesIO]]],
-        max_workers: int = 10,
-    ) -> dict[Any, str]:
-        """
-        Transcribe multiple audio files concurrently.
-
-        Args:
-            audio_inputs: List of tuples (identifier, audio_input)
-            max_workers: Maximum number of concurrent workers
-
-        Returns:
-            List of tuples (identifier, transcription_text)
-        """
-        results = {}
-
-        def transcribe_single(
-            item: tuple[Any, Union[str, bytes, io.BytesIO]],
-        ) -> tuple[Any, str]:
-            """Helper function to transcribe a single audio input."""
-            identifier, audio_input = item
-            try:
-                transcription = self.transcribe(audio_input)
-                return (identifier, transcription)
-            except Exception as e:
-                # Return error message as transcription
-                print(f"Error transcribing {identifier}: {e}")
-                return (identifier, f"ERROR: {str(e)}")
-
-        # Use ThreadPoolExecutor for concurrent processing
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            future_to_item = {
-                executor.submit(transcribe_single, item): item for item in audio_inputs
-            }
-
-            # Collect results as they complete
-            for future in as_completed(future_to_item):
-                id, result = future.result()
-                results[id] = result
-
-        return results
 
     def __repr__(self) -> str:
         return (

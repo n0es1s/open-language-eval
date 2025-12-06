@@ -65,8 +65,6 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-TARGET_SAMPLING_RATE = 24000 # target sampling rate given by openai, they only support 24 kHz for now
-
 wer_metric = load("wer")
 if args.language == "en":
     normalizer = EnglishTextNormalizer()
@@ -138,28 +136,18 @@ for i, sample in enumerate(dataset):
     audio_array = sample['audio']['array']
     sampling_rate = sample['audio']['sampling_rate']
 
-    if sampling_rate!=TARGET_SAMPLING_RATE:
-        print(f"resampling audio from {sampling_rate} to 24000")
-        audio_array = resample(audio_array, orig_sr=sampling_rate, target_sr=TARGET_SAMPLING_RATE)
-
-    audio_duration_seconds = round(len(audio_array) / TARGET_SAMPLING_RATE, 2)
-    print(f"\nAudio duration: {audio_duration_seconds} seconds")
-
     # Play audio clip if enabled
     if args.play_audio:
         print("Playing audio clip...")
-        sd.play(audio_array, TARGET_SAMPLING_RATE)
+        sd.play(audio_array, sampling_rate)
         sd.wait()  # Wait until audio finishes playing
 
-    # Convert audio array to file-like object for transcription
-    audio_bytes = io.BytesIO()
-    sf.write(audio_bytes, audio_array, sampling_rate, format="WAV")
-    audio_bytes.seek(0)
-    audio_bytes.name = "audio.wav"
+    audio_duration_seconds = round(len(audio_array) / sampling_rate, 2)
+    print(f"\nAudio duration: {audio_duration_seconds} seconds")
 
     # Transcribe using service
     print("\nTranscribing...")
-    transcription_text = transcription_service.transcribe(audio_bytes)
+    transcription_text = transcription_service.transcribe(audio_array, sampling_rate)
 
     print(f"\nModel transcription: {transcription_text}")
 
